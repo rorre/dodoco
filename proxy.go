@@ -72,26 +72,26 @@ func (p *Proxy) dialForHost(host string) (DialContextFunc, error) {
 func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	d, err := p.dialForHost(r.Host)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		httpError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
 	dest, err := d(r.Context(), "tcp", r.Host)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		httpError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer dest.Close()
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
+		httpError(w, "hijacking not supported", http.StatusInternalServerError)
 		return
 	}
 
 	client, _, err := hj.Hijack()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer client.Close()
@@ -111,7 +111,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Host == "" {
-		http.Error(w, "missing host in request URI", http.StatusBadRequest)
+		httpError(w, "missing host in request URI", http.StatusBadRequest)
 		return
 	}
 
@@ -119,7 +119,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	dialFn, err := p.dialForHost(r.URL.Host)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		httpError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	transport := &http.Transport{
@@ -131,7 +131,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := transport.RoundTrip(r)
 	if err != nil {
 		log.Printf("upstream error: %v", err)
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		httpError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -139,6 +139,25 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+func httpError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
+	fmt.Fprintf(
+		w,
+		`<!DOCTYPE html>
+			<html><head><title>%d %s</title></head>
+			<body>
+				<h1>%d %s</h1>
+				<p>%s</p>
+				<p>Dodoco Proxy</p>
+			</body>
+		</html>`,
+		code, http.StatusText(code),
+		code, http.StatusText(code),
+		message,
+	)
 }
 
 func copyHeaders(dst, src http.Header) {
