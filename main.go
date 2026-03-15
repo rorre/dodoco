@@ -1,0 +1,39 @@
+package main
+
+import (
+	"flag"
+	"log"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("failed to get home directory: %v", err)
+	}
+	defaultRulesPath := filepath.Join(home, ".config", "dodoco", "rules.json")
+
+	addr := flag.String("addr", ":8080", "listen address")
+	rulesPath := flag.String("rules", defaultRulesPath, "path to rules file")
+	flag.Parse()
+
+	var rules []Rule
+	if _, err := os.Stat(*rulesPath); os.IsNotExist(err) {
+		log.Printf("warning: rules file %s not found, running as pass-through proxy", *rulesPath)
+	} else {
+		rules, err = LoadRules(*rulesPath)
+		if err != nil {
+			log.Fatalf("failed to load rules: %v", err)
+		}
+	}
+
+	engine, err := NewRuleEngine(rules)
+	if err != nil {
+		log.Fatalf("failed to compile rules: %v", err)
+	}
+
+	p := New(engine)
+	log.Printf("dodoco proxy listening on %s", *addr)
+	log.Fatal(p.ListenAndServe(*addr))
+}
