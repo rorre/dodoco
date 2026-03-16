@@ -35,6 +35,12 @@ func main() {
 		log.Fatalf("failed to compile rules: %v", err)
 	}
 
+	if _, err := os.Stat(*rulesPath); !os.IsNotExist(err) {
+		if err := WatchRules(engine, *rulesPath); err != nil {
+			log.Printf("warning: failed to watch rules file: %v", err)
+		}
+	}
+
 	p := New(engine)
 	if *username != "" {
 		p.Username = *username

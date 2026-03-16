@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"golang.org/x/sys/unix"
 )
 
@@ -155,6 +158,7 @@ func LoadRules(path string) ([]Rule, error) {
 }
 
 type RuleEngine struct {
+	mu    sync.RWMutex
 	rules []Rule
 }
 
@@ -165,6 +169,66 @@ func NewRuleEngine(rules []Rule) (*RuleEngine, error) {
 		}
 	}
 	return &RuleEngine{rules: rules}, nil
+}
+
+func (e *RuleEngine) Reload(path string) error {
+	rules, err := LoadRules(path)
+	if err != nil {
+		return err
+	}
+	for i := range rules {
+		if err := rules[i].Validate(); err != nil {
+			return err
+		}
+	}
+	e.mu.Lock()
+	e.rules = rules
+	e.mu.Unlock()
+	return nil
+}
+
+func WatchRules(engine *RuleEngine, path string) error {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("creating watcher: %w", err)
+	}
+
+	// Watch the directory so we catch file renames/recreates (e.g. editors that write-then-rename).
+	dir := filepath.Dir(path)
+	if err := watcher.Add(dir); err != nil {
+		watcher.Close()
+		return fmt.Errorf("watching %s: %w", dir, err)
+	}
+
+	base := filepath.Base(path)
+	go func() {
+		defer watcher.Close()
+		for {
+			select {
+			case ev, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if filepath.Base(ev.Name) != base {
+					continue
+				}
+				if ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) {
+					if err := engine.Reload(path); err != nil {
+						log.Printf("failed to reload rules: %v", err)
+					} else {
+						log.Printf("rules reloaded from %s", path)
+					}
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Printf("watcher error: %v", err)
+			}
+		}
+	}()
+
+	return nil
 }
 
 func specificity(pattern string) int {
@@ -181,6 +245,8 @@ func specificity(pattern string) int {
 }
 
 func (e *RuleEngine) Find(hostname string) *Rule {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	var best *Rule
 	bestScore := -1
 	for i := range e.rules {
