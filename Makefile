@@ -36,6 +36,8 @@ run: build
 install: build
 	install -Dm755 $(BIN) $(INSTALL_DIR)/$(BIN)
 	sudo setcap cap_net_raw=+ep $(INSTALL_DIR)/$(BIN)
+	mkdir -p $(CONFIG_DIR)
+	test -f $(CONFIG_DIR)/config.json || install -Dm644 config.json $(CONFIG_DIR)/config.json
 	mkdir -p $(UNIT_DIR)
 	echo "$$UNIT_FILE" > $(UNIT_DIR)/$(BIN).service
 	systemctl --user daemon-reload
