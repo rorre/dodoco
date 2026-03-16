@@ -13,8 +13,8 @@ func main() {
 		log.Fatalf("failed to get home directory: %v", err)
 	}
 	defaultRulesPath := filepath.Join(home, ".config", "dodoco", "rules.json")
-
 	addr := flag.String("addr", ":8080", "listen address")
+	adminAddr := flag.String("admin", ":9090", "admin server listen address")
 	rulesPath := flag.String("rules", defaultRulesPath, "path to rules file")
 	username := flag.String("username", "", "proxy authentication username")
 	password := flag.String("password", "", "proxy authentication password")
@@ -39,6 +39,10 @@ func main() {
 		if err := WatchRules(engine, *rulesPath); err != nil {
 			log.Printf("warning: failed to watch rules file: %v", err)
 		}
+	}
+
+	if *adminAddr != "" {
+		StartAdmin(*adminAddr, *rulesPath, engine)
 	}
 
 	p := New(engine)

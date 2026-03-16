@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dodoco</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface: '#1a1a2e',
+            card: '#16213e',
+            accent: '#0f3460',
+            highlight: '#e94560',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+
+<body class="dark bg-surface min-h-screen text-gray-200">
+
+  <div x-data="adminApp()" x-init="init()" class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-transition
+      class="fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium"
+      :class="toast.error ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'">
+      <span x-text="toast.message"></span>
+    </div>
+
+    <!-- Header -->
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-white tracking-tight">dodoco</h1>
+      <p class="text-gray-400 mt-1">rule management</p>
+    </div>
+
+    <!-- Rules Table -->
+    <div class="bg-card rounded-xl border border-gray-700/50 overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-700/50 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">Rules</h2>
+        <span class="text-xs text-gray-500" x-text="rules.length + ' rule(s)'"></span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-gray-400 text-left text-xs uppercase tracking-wider border-b border-gray-700/50">
+              <th class="px-5 py-3">Host Rule</th>
+              <th class="px-5 py-3">Target Interface</th>
+              <th class="px-5 py-3">Target DNS</th>
+              <th class="px-5 py-3 w-20">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(rule, index) in rules" :key="index">
+              <tr class="border-b border-gray-700/30 hover:bg-accent/20 transition-colors">
+                <td class="px-5 py-3 font-mono text-sm text-gray-200" x-text="rule.host"></td>
+                <td class="px-5 py-3 font-mono text-sm text-gray-300" x-text="rule.targetInterface || '—'"></td>
+                <td class="px-5 py-3 font-mono text-sm text-gray-300" x-text="rule.targetDNS || '—'"></td>
+                <td class="px-5 py-3">
+                  <button @click="removeRule(index)"
+                    class="text-red-400 hover:text-red-300 transition-colors text-xs font-medium">
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="rules.length === 0">
+              <td colspan="4" class="px-5 py-6 text-center text-gray-500 italic">No rules configured</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Add Rule Form -->
+    <div class="mt-6 bg-card rounded-xl border border-gray-700/50 p-5">
+      <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Add Rule</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Host Rule</label>
+          <input type="text" x-model="newRule.host" placeholder="*.example.com"
+            class="w-full bg-surface border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-highlight focus:ring-1 focus:ring-highlight">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Target Interface</label>
+          <input type="text" x-model="newRule.targetInterface" list="iface-list" placeholder="tun0"
+            class="w-full bg-surface border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-highlight focus:ring-1 focus:ring-highlight">
+          <datalist id="iface-list">
+            <template x-for="iface in interfaces" :key="iface.name">
+              <option :value="iface.name" x-text="iface.name + ' (' + iface.addresses.join(', ') + ')'"></option>
+            </template>
+          </datalist>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Target DNS</label>
+          <input type="text" x-model="newRule.targetDNS" placeholder="1.1.1.1 (optional)"
+            class="w-full bg-surface border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-highlight focus:ring-1 focus:ring-highlight">
+        </div>
+      </div>
+      <div class="mt-4">
+        <button @click="addRule()" :disabled="!newRule.host.trim()"
+          class="px-4 py-2 bg-accent hover:bg-accent/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          Add
+        </button>
+      </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="mt-6 flex justify-end">
+      <button @click="saveRules()" :disabled="saving"
+        class="px-6 py-2.5 bg-highlight hover:bg-highlight/80 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
+        <span x-show="!saving">Save Rules</span>
+        <span x-show="saving">Saving…</span>
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    function adminApp() {
+      return {
+        rules: [],
+        interfaces: [],
+        newRule: { host: '', targetInterface: '', targetDNS: '' },
+        saving: false,
+        toast: { show: false, message: '', error: false },
+
+        async init() {
+          await Promise.all([this.loadRules(), this.loadInterfaces()]);
+        },
+
+        async loadRules() {
+          try {
+            const resp = await fetch('/api/rules');
+            const data = await resp.json();
+            this.rules = Object.entries(data.rules || {}).map(([host, target]) => ({
+              host,
+              targetInterface: target.targetInterface || '',
+              targetDNS: target.targetDNS || '',
+            }));
+          } catch (e) {
+            this.showToast('Failed to load rules: ' + e.message, true);
+          }
+        },
+
+        async loadInterfaces() {
+          try {
+            const resp = await fetch('/api/interfaces');
+            this.interfaces = await resp.json();
+          } catch (e) {
+            console.error('Failed to load interfaces:', e);
+          }
+        },
+
+        addRule() {
+          const host = this.newRule.host.trim();
+          if (!host) return;
+
+          this.rules.push({
+            host,
+            targetInterface: this.newRule.targetInterface.trim(),
+            targetDNS: this.newRule.targetDNS.trim(),
+          });
+          this.newRule = { host: '', targetInterface: '', targetDNS: '' };
+        },
+
+        removeRule(index) {
+          this.rules.splice(index, 1);
+        },
+
+        async saveRules() {
+          this.saving = true;
+          try {
+            const rulesObj = {};
+            for (const rule of this.rules) {
+              const target = {};
+              if (rule.targetInterface) target.targetInterface = rule.targetInterface;
+              if (rule.targetDNS) target.targetDNS = rule.targetDNS;
+              rulesObj[rule.host] = target;
+            }
+
+            const resp = await fetch('/api/rules', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ rules: rulesObj }),
+            });
+
+            if (!resp.ok) {
+              const text = await resp.text();
+              throw new Error(text);
+            }
+            this.showToast('Rules saved successfully', false);
+          } catch (e) {
+            this.showToast('Failed to save: ' + e.message, true);
+          } finally {
+            this.saving = false;
+          }
+        },
+
+        showToast(message, error) {
+          this.toast = { show: true, message, error };
+          setTimeout(() => { this.toast.show = false; }, 3000);
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>
