@@ -1,17 +1,21 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type Proxy struct {
 	Transport *http.Transport
 	Rules     *RuleEngine
+	Username  string
+	Password  string
 }
 
 func New(rules *RuleEngine) *Proxy {
@@ -26,6 +30,23 @@ func New(rules *RuleEngine) *Proxy {
 	}
 }
 
+func (p *Proxy) checkProxyAuth(r *http.Request) bool {
+	auth := r.Header.Get("Proxy-Authorization")
+	const prefix = "Basic "
+	if !strings.HasPrefix(auth, prefix) {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(auth[len(prefix):])
+	if err != nil {
+		return false
+	}
+	user, pass, ok := strings.Cut(string(decoded), ":")
+	if !ok {
+		return false
+	}
+	return user == p.Username && pass == p.Password
+}
+
 func (p *Proxy) ListenAndServe(addr string) error {
 	srv := &http.Server{
 		Addr:    addr,
@@ -35,6 +56,13 @@ func (p *Proxy) ListenAndServe(addr string) error {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.Username != "" && !p.checkProxyAuth(r) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="dodoco"`)
+		httpError(w, "Proxy authentication required", http.StatusProxyAuthRequired)
+		return
+	}
+	r.Header.Del("Proxy-Authorization")
+
 	if r.Method == http.MethodConnect {
 		// This is for HTTPS proxy
 		p.handleConnect(w, r)

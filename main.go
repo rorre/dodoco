@@ -16,6 +16,8 @@ func main() {
 
 	addr := flag.String("addr", ":8080", "listen address")
 	rulesPath := flag.String("rules", defaultRulesPath, "path to rules file")
+	username := flag.String("username", "", "proxy authentication username")
+	password := flag.String("password", "", "proxy authentication password")
 	flag.Parse()
 
 	var rules []Rule
@@ -34,6 +36,11 @@ func main() {
 	}
 
 	p := New(engine)
+	if *username != "" {
+		p.Username = *username
+		p.Password = *password
+		log.Printf("proxy authentication enabled")
+	}
 	log.Printf("dodoco proxy listening on %s", *addr)
 	log.Fatal(p.ListenAndServe(*addr))
 }
