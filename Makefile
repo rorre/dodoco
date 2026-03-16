@@ -13,7 +13,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=$(INSTALL_DIR)/$(BIN) -rules $(CONFIG_DIR)/rules.json -addr ":13234"
+ExecStart=$(INSTALL_DIR)/$(BIN)
 Restart=on-failure
 RestartSec=5
 
