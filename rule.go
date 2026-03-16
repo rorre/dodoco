@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -166,12 +167,30 @@ func NewRuleEngine(rules []Rule) (*RuleEngine, error) {
 	return &RuleEngine{rules: rules}, nil
 }
 
-// Find returns the first rule matching the hostname, or nil.
+func specificity(pattern string) int {
+	// very naive, just check how much has matched to the right
+	segments := strings.Split(pattern, ".")
+	score := 0
+	for i := len(segments) - 1; i >= 0; i-- {
+		if strings.ContainsAny(segments[i], "*?") {
+			break
+		}
+		score++
+	}
+	return score
+}
+
 func (e *RuleEngine) Find(hostname string) *Rule {
+	var best *Rule
+	bestScore := -1
 	for i := range e.rules {
 		if e.rules[i].Match(hostname) {
-			return &e.rules[i]
+			s := specificity(e.rules[i].HostRule)
+			if s > bestScore {
+				bestScore = s
+				best = &e.rules[i]
+			}
 		}
 	}
-	return nil
+	return best
 }
