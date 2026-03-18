@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/rorre/dodoco/proxy"
 )
@@ -85,6 +86,10 @@ func main() {
 			cfg.Password = *password
 		}
 	})
+
+	if strings.HasPrefix(cfg.RulesPath, "~/") {
+		cfg.RulesPath = filepath.Join(home, cfg.RulesPath[2:])
+	}
 
 	var rules []proxy.Rule
 	if _, err := os.Stat(cfg.RulesPath); os.IsNotExist(err) {
