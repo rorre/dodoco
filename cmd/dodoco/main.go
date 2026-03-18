@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/rorre/dodoco/proxy"
 )
 
 type Config struct {
@@ -84,32 +86,32 @@ func main() {
 		}
 	})
 
-	var rules []Rule
+	var rules []proxy.Rule
 	if _, err := os.Stat(cfg.RulesPath); os.IsNotExist(err) {
 		log.Printf("warning: rules file %s not found, running as pass-through proxy", cfg.RulesPath)
 	} else {
-		rules, err = LoadRules(cfg.RulesPath)
+		rules, err = proxy.LoadRules(cfg.RulesPath)
 		if err != nil {
 			log.Fatalf("failed to load rules: %v", err)
 		}
 	}
 
-	engine, err := NewRuleEngine(rules)
+	engine, err := proxy.NewRuleEngine(rules)
 	if err != nil {
 		log.Fatalf("failed to compile rules: %v", err)
 	}
 
 	if _, err := os.Stat(cfg.RulesPath); !os.IsNotExist(err) {
-		if err := WatchRules(engine, cfg.RulesPath); err != nil {
+		if err := proxy.WatchRules(engine, cfg.RulesPath); err != nil {
 			log.Printf("warning: failed to watch rules file: %v", err)
 		}
 	}
 
 	if cfg.Admin != "" {
-		StartAdmin(cfg.Admin, cfg.RulesPath, engine)
+		proxy.StartAdmin(cfg.Admin, cfg.RulesPath, engine)
 	}
 
-	p := New(engine)
+	p := proxy.New(engine)
 	if cfg.Username != "" {
 		p.Username = cfg.Username
 		p.Password = cfg.Password

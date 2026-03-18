@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	_ "embed"
@@ -10,7 +10,7 @@ import (
 	"os"
 )
 
-//go:embed admin.html
+//go:embed static/admin.html
 var adminHTML []byte
 
 type interfaceInfo struct {

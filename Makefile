@@ -25,7 +25,8 @@ export UNIT_FILE
 
 .PHONY: build
 build:
-	go build -o $(BIN) .
+	mkdir dist
+	go build -o dist/$(BIN) ./cmd/dodoco
 	sudo setcap cap_net_raw=+ep $(BIN)
 
 .PHONY: run
