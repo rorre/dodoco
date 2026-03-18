@@ -1,4 +1,4 @@
-BIN := dodoco
+BIN := dist/dodoco
 CERT_DIR := certs
 CA_CERT := $(CERT_DIR)/ca.crt
 CA_KEY := $(CERT_DIR)/ca.key
@@ -25,8 +25,8 @@ export UNIT_FILE
 
 .PHONY: build
 build:
-	mkdir dist
-	go build -o dist/$(BIN) ./cmd/dodoco
+	mkdir -p dist
+	go build -o $(BIN) ./cmd/dodoco
 	sudo setcap cap_net_raw=+ep $(BIN)
 
 .PHONY: run
