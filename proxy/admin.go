@@ -71,10 +71,15 @@ func handlePutRules(w http.ResponseWriter, r *http.Request, rulesPath string, en
 	}
 
 	for host, target := range f.Rules {
+		enabled := true
+		if target.Enabled != nil {
+			enabled = *target.Enabled
+		}
 		rule := Rule{
 			HostRule:        host,
 			TargetInterface: target.TargetInterface,
 			TargetDNS:       target.TargetDNS,
+			Enabled:         enabled,
 		}
 		if err := rule.Validate(); err != nil {
 			http.Error(w, fmt.Sprintf("invalid rule %q: %v", host, err), http.StatusBadRequest)

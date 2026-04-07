@@ -21,6 +21,7 @@ type Rule struct {
 	HostRule        string `json:"hostRule"`
 	TargetInterface string `json:"targetInterface,omitempty"`
 	TargetDNS       string `json:"targetDNS,omitempty"`
+	Enabled         bool   `json:"enabled"`
 }
 
 func (r *Rule) Validate() error {
@@ -129,6 +130,7 @@ func (r *Rule) Dialer(timeout time.Duration) (DialContextFunc, error) {
 type ruleTarget struct {
 	TargetInterface string `json:"targetInterface,omitempty"`
 	TargetDNS       string `json:"targetDNS,omitempty"`
+	Enabled         *bool  `json:"enabled,omitempty"`
 }
 
 type ruleFile struct {
@@ -148,10 +150,15 @@ func LoadRules(path string) ([]Rule, error) {
 
 	rules := make([]Rule, 0, len(f.Rules))
 	for host, target := range f.Rules {
+		enabled := true
+		if target.Enabled != nil {
+			enabled = *target.Enabled
+		}
 		rules = append(rules, Rule{
 			HostRule:        host,
 			TargetInterface: target.TargetInterface,
 			TargetDNS:       target.TargetDNS,
+			Enabled:         enabled,
 		})
 	}
 	return rules, nil
@@ -250,6 +257,9 @@ func (e *RuleEngine) Find(hostname string) *Rule {
 	var best *Rule
 	bestScore := -1
 	for i := range e.rules {
+		if !e.rules[i].Enabled {
+			continue
+		}
 		if e.rules[i].Match(hostname) {
 			s := specificity(e.rules[i].HostRule)
 			if s > bestScore {
