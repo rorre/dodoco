@@ -53,6 +53,17 @@ uninstall:
 	rm -f $(UNIT_DIR)/$(BIN).service
 	systemctl --user daemon-reload
 
+.PHONY: certs
+certs:
+	mkdir -p $(CERT_DIR)
+	openssl genrsa -out $(CA_KEY) 2048
+	openssl req -new -x509 -days 3650 -key $(CA_KEY) -out $(CA_CERT) -subj "/CN=Dodoco Root CA"
+	@echo "CA certificate generated at $(CA_CERT)"
+	@echo "To install in system trust store:"
+	@echo "  sudo cp $(CA_CERT) /usr/local/share/ca-certificates/dodoco.crt"
+	@echo "  sudo update-ca-certificates"
+
 .PHONY: clean
 clean:
-	rm -f $(BIN)
+	rm -rf dist
+	rm -rf $(CERT_DIR)
