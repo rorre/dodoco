@@ -17,11 +17,18 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type ModifyRule struct {
+	Search  string `json:"search"`
+	Replace string `json:"replace"`
+	IsRegex bool   `json:"isRegex"`
+}
+
 type Rule struct {
-	HostRule        string `json:"hostRule"`
-	TargetInterface string `json:"targetInterface,omitempty"`
-	TargetDNS       string `json:"targetDNS,omitempty"`
-	Enabled         bool   `json:"enabled"`
+	HostRule        string       `json:"hostRule"`
+	TargetInterface string       `json:"targetInterface,omitempty"`
+	TargetDNS       string       `json:"targetDNS,omitempty"`
+	ModifyResponse  []ModifyRule `json:"modifyResponse,omitempty"`
+	Enabled         bool         `json:"enabled"`
 }
 
 func (r *Rule) Validate() error {
@@ -128,9 +135,10 @@ func (r *Rule) Dialer(timeout time.Duration) (DialContextFunc, error) {
 }
 
 type ruleTarget struct {
-	TargetInterface string `json:"targetInterface,omitempty"`
-	TargetDNS       string `json:"targetDNS,omitempty"`
-	Enabled         *bool  `json:"enabled,omitempty"`
+	TargetInterface string       `json:"targetInterface,omitempty"`
+	TargetDNS       string       `json:"targetDNS,omitempty"`
+	ModifyResponse  []ModifyRule `json:"modifyResponse,omitempty"`
+	Enabled         *bool        `json:"enabled,omitempty"`
 }
 
 type ruleFile struct {
@@ -158,11 +166,13 @@ func LoadRules(path string) ([]Rule, error) {
 			HostRule:        host,
 			TargetInterface: target.TargetInterface,
 			TargetDNS:       target.TargetDNS,
+			ModifyResponse:  target.ModifyResponse,
 			Enabled:         enabled,
 		})
 	}
 	return rules, nil
 }
+
 
 type RuleEngine struct {
 	mu    sync.RWMutex

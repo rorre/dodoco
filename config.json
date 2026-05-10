@@ -3,5 +3,7 @@
   "admin": ":9090",
   "rulesPath": "~/.config/dodoco/rules.json",
   "username": "",
-  "password": ""
+  "password": "",
+  "caCert": "~/.config/dodoco/ca.crt",
+  "caKey": "~/.config/dodoco/ca.key"
 }

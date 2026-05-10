@@ -1,12 +1,16 @@
 package proxy
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -16,6 +20,7 @@ type Proxy struct {
 	Rules     *RuleEngine
 	Username  string
 	Password  string
+	mitm      *mitmConfig
 }
 
 func New(rules *RuleEngine) *Proxy {
@@ -98,6 +103,26 @@ func (p *Proxy) dialForHost(host string) (DialContextFunc, error) {
 }
 
 func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
+	hostname, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		hostname = r.Host
+	}
+
+	var matched *Rule
+	if p.Rules != nil {
+		matched = p.Rules.Find(hostname)
+	}
+
+	// If there are NO modify rules for a domain, then revert to tunneling and using transparent proxy
+	if matched == nil || len(matched.ModifyResponse) == 0 || p.mitm == nil {
+		p.handleTransparentConnect(w, r)
+		return
+	}
+
+	p.handleMITM(w, r, matched)
+}
+
+func (p *Proxy) handleTransparentConnect(w http.ResponseWriter, r *http.Request) {
 	d, err := p.dialForHost(r.Host)
 	if err != nil {
 		httpError(w, err.Error(), http.StatusBadGateway)
@@ -137,6 +162,126 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	io.Copy(client, dest)
 }
 
+func (p *Proxy) handleMITM(w http.ResponseWriter, r *http.Request, rule *Rule) {
+	cert, err := p.getCertForHost(r.Host)
+	if err != nil {
+		httpError(w, "failed to generate cert: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		httpError(w, "hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+
+	clientConn, _, err := hj.Hijack()
+	if err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer clientConn.Close()
+
+	clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{*cert},
+	}
+	tlsClientConn := tls.Server(clientConn, tlsConfig)
+	if err := tlsClientConn.Handshake(); err != nil {
+		log.Printf("TLS handshake with client failed: %v", err)
+		return
+	}
+	defer tlsClientConn.Close()
+
+	// Dial to destination
+	dialFn, err := p.dialForHost(r.Host)
+	if err != nil {
+		log.Printf("failed to dial destination %s: %v", r.Host, err)
+		return
+	}
+
+	reader := bufio.NewReader(tlsClientConn)
+	for {
+		req, err := http.ReadRequest(reader)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("error reading request from %s: %v", r.Host, err)
+			}
+			return
+		}
+
+		// Prepare request to upstream
+		req.URL.Scheme = "https"
+		req.URL.Host = r.Host
+		req.RequestURI = ""
+
+		// If we have modification rules, we need to ensure we can decompress the response.
+		// By deleting Accept-Encoding, http.Transport will request gzip and decompress it automatically.
+		if len(rule.ModifyResponse) > 0 {
+			req.Header.Del("Accept-Encoding")
+		}
+
+		transport := &http.Transport{
+			DialContext: dialFn,
+		}
+
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			log.Printf("upstream error for %s: %v", r.Host, err)
+			return
+		}
+
+		// Apply modification rules
+		p.modifyResponse(resp, rule)
+
+		if err := resp.Write(tlsClientConn); err != nil {
+			log.Printf("error writing response to client: %v", err)
+			return
+		}
+		resp.Body.Close()
+	}
+}
+
+func (p *Proxy) modifyResponse(resp *http.Response, rule *Rule) {
+	if len(rule.ModifyResponse) == 0 {
+		return
+	}
+
+	// Only modify text-based responses for safety
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "text") && !strings.Contains(contentType, "json") && !strings.Contains(contentType, "javascript") && !strings.Contains(contentType, "xml") {
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("failed to read response body: %v", err)
+		return
+	}
+	resp.Body.Close()
+
+	newBody := body
+	for _, m := range rule.ModifyResponse {
+		if m.IsRegex {
+			re, err := regexp.Compile(m.Search)
+			if err != nil {
+				log.Printf("invalid regex %q: %v", m.Search, err)
+				continue
+			}
+			newBody = re.ReplaceAll(newBody, []byte(m.Replace))
+		} else {
+			newBody = bytes.ReplaceAll(newBody, []byte(m.Search), []byte(m.Replace))
+		}
+	}
+
+	resp.Body = io.NopCloser(bytes.NewReader(newBody))
+	resp.ContentLength = int64(len(newBody))
+	resp.Header.Set("Content-Length", fmt.Sprint(len(newBody)))
+	// Remove Content-Encoding as we might have invalidated it (e.g. gzip)
+	resp.Header.Del("Content-Encoding")
+}
+
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Host == "" {
 		httpError(w, "missing host in request URI", http.StatusBadRequest)
@@ -144,6 +289,20 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.RequestURI = ""
+
+	hostname, _, err := net.SplitHostPort(r.URL.Host)
+	if err != nil {
+		hostname = r.URL.Host
+	}
+
+	var matchedRule *Rule
+	if p.Rules != nil {
+		matchedRule = p.Rules.Find(hostname)
+	}
+
+	if matchedRule != nil && len(matchedRule.ModifyResponse) > 0 {
+		r.Header.Del("Accept-Encoding")
+	}
 
 	dialFn, err := p.dialForHost(r.URL.Host)
 	if err != nil {
@@ -162,11 +321,17 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
 
-	copyHeaders(w.Header(), resp.Header)
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if matchedRule != nil {
+		p.modifyResponse(resp, matchedRule)
+	}
+
+	if err := resp.Write(w); err != nil {
+		log.Printf("error writing response to client: %v", err)
+		return
+	}
+
+	resp.Body.Close()
 }
 
 func httpError(w http.ResponseWriter, message string, code int) {
@@ -186,12 +351,4 @@ func httpError(w http.ResponseWriter, message string, code int) {
 		code, http.StatusText(code),
 		message,
 	)
-}
-
-func copyHeaders(dst, src http.Header) {
-	for k, vs := range src {
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
-	}
 }

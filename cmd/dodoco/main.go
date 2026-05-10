@@ -17,6 +17,8 @@ type Config struct {
 	RulesPath string `json:"rulesPath"`
 	Username  string `json:"username"`
 	Password  string `json:"password"`
+	CACert    string `json:"caCert"`
+	CAKey     string `json:"caKey"`
 }
 
 func loadConfigFile(path string) (Config, error) {
@@ -37,6 +39,8 @@ func main() {
 	configDir := filepath.Join(home, ".config", "dodoco")
 	defaultRulesPath := filepath.Join(configDir, "rules.json")
 	defaultConfigPath := filepath.Join(configDir, "config.json")
+	defaultCACert := filepath.Join(configDir, "ca.crt")
+	defaultCAKey := filepath.Join(configDir, "ca.key")
 
 	configPath := flag.String("config", defaultConfigPath, "path to config file")
 	addr := flag.String("addr", "", "listen address")
@@ -44,6 +48,8 @@ func main() {
 	rulesPath := flag.String("rulesPath", "", "path to rules file")
 	username := flag.String("username", "", "proxy authentication username")
 	password := flag.String("password", "", "proxy authentication password")
+	caCert := flag.String("caCert", "", "path to CA certificate")
+	caKey := flag.String("caKey", "", "path to CA private key")
 	flag.Parse()
 
 	// Load config file defaults
@@ -51,6 +57,8 @@ func main() {
 		Addr:      ":8080",
 		Admin:     ":9090",
 		RulesPath: defaultRulesPath,
+		CACert:    defaultCACert,
+		CAKey:     defaultCAKey,
 	}
 	if fileCfg, err := loadConfigFile(*configPath); err == nil {
 		log.Printf("loaded config from %s", *configPath)
@@ -69,6 +77,12 @@ func main() {
 		if fileCfg.Password != "" {
 			cfg.Password = fileCfg.Password
 		}
+		if fileCfg.CACert != "" {
+			cfg.CACert = fileCfg.CACert
+		}
+		if fileCfg.CAKey != "" {
+			cfg.CAKey = fileCfg.CAKey
+		}
 	}
 
 	// Command-line flags override config file
@@ -84,11 +98,21 @@ func main() {
 			cfg.Username = *username
 		case "password":
 			cfg.Password = *password
+		case "caCert":
+			cfg.CACert = *caCert
+		case "caKey":
+			cfg.CAKey = *caKey
 		}
 	})
 
 	if strings.HasPrefix(cfg.RulesPath, "~/") {
 		cfg.RulesPath = filepath.Join(home, cfg.RulesPath[2:])
+	}
+	if strings.HasPrefix(cfg.CACert, "~/") {
+		cfg.CACert = filepath.Join(home, cfg.CACert[2:])
+	}
+	if strings.HasPrefix(cfg.CAKey, "~/") {
+		cfg.CAKey = filepath.Join(home, cfg.CAKey[2:])
 	}
 
 	var rules []proxy.Rule
@@ -122,6 +146,20 @@ func main() {
 		p.Password = cfg.Password
 		log.Printf("proxy authentication enabled")
 	}
+
+	// Initialize MITM
+	if cfg.CACert != "" && cfg.CAKey != "" {
+		if err := p.InitMITM(cfg.CACert, cfg.CAKey); err != nil {
+			log.Printf("MITM initialization failed: %v (HTTPS modification disabled)", err)
+		} else {
+			log.Printf("MITM initialized with CA: %s", cfg.CACert)
+			if !p.CheckCAInstalled() {
+				log.Printf("warning: CA certificate is not installed in system trust store")
+			}
+		}
+	}
+
 	log.Printf("dodoco proxy listening on %s", cfg.Addr)
 	log.Fatal(p.ListenAndServe(cfg.Addr))
 }
+
