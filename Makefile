@@ -1,4 +1,5 @@
-BIN := dist/dodoco
+BIN_NAME := dodoco
+BIN := dist/$(BIN_NAME)
 CERT_DIR := certs
 CA_CERT := $(CERT_DIR)/ca.crt
 CA_KEY := $(CERT_DIR)/ca.key
@@ -40,7 +41,7 @@ install: build
 	mkdir -p $(CONFIG_DIR)
 	test -f $(CONFIG_DIR)/config.json || install -Dm644 config.json $(CONFIG_DIR)/config.json
 	mkdir -p $(UNIT_DIR)
-	echo "$$UNIT_FILE" > $(UNIT_DIR)/$(BIN).service
+	echo "$$UNIT_FILE" > $(UNIT_DIR)/$(BIN_NAME).service
 	systemctl --user daemon-reload
 	@echo "Installed. Enable with: systemctl --user enable --now $(BIN)"
 
