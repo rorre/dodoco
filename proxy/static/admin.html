@@ -70,11 +70,14 @@
                 </td>
                 <td class="px-5 py-3">
                   <template x-for="(mod, mIndex) in rule.modifyResponse" :key="mIndex">
-                    <div class="text-xs flex items-center gap-2 mb-1">
+                    <div class="text-xs flex items-center gap-2 mb-1 group">
                       <span class="px-1.5 py-0.5 rounded bg-highlight/20 text-highlight font-mono text-[10px]" x-text="mod.isRegex ? 'RE' : 'ST'"></span>
-                      <span class="text-gray-400 truncate max-w-[100px]" x-text="mod.search"></span>
+                      <span class="text-gray-400 truncate max-w-[100px]" x-text="mod.search" :title="mod.search"></span>
                       <span class="text-gray-600">→</span>
-                      <span class="text-gray-300 truncate max-w-[100px]" x-text="mod.replace"></span>
+                      <span class="text-gray-300 truncate max-w-[100px]" x-text="mod.replace" :title="mod.replace"></span>
+                      <button @click="rule.modifyResponse.splice(mIndex, 1)" class="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity text-sm">
+                        Delete
+                      </button>
                     </div>
                   </template>
                   <div class="text-xs text-gray-600 italic" x-show="!rule.modifyResponse || rule.modifyResponse.length === 0">None</div>
@@ -87,7 +90,11 @@
                       :class="rule.enabled ? 'translate-x-4' : 'translate-x-1'"></span>
                   </button>
                 </td>
-                <td class="px-5 py-3">
+                <td class="px-5 py-3 flex items-center gap-3">
+                  <button @click="editRule(index)"
+                    class="text-highlight hover:text-highlight/80 transition-colors text-xs font-medium">
+                    Edit
+                  </button>
                   <button @click="removeRule(index)"
                     class="text-red-400 hover:text-red-300 transition-colors text-xs font-medium">
                     Delete
@@ -103,9 +110,9 @@
       </div>
     </div>
 
-    <!-- Add Rule Form -->
-    <div class="mt-6 bg-card rounded-xl border border-gray-700/50 p-5">
-      <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Add Rule</h3>
+    <!-- Add/Edit Rule Form -->
+    <div class="mt-6 bg-card rounded-xl border border-gray-700/50 p-5" id="rule-form">
+      <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4" x-text="editingIndex === null ? 'Add Rule' : 'Edit Rule'">Add Rule</h3>
       <div class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
@@ -131,7 +138,10 @@
         </div>
 
         <div class="pt-2">
-          <label class="block text-xs text-gray-500 mb-2">Response Modifications</label>
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-xs text-gray-500">Response Modifications</label>
+            <button x-show="newRule.modifyResponse.length > 0" @click="newRule.modifyResponse = []" class="text-[10px] text-gray-500 hover:text-red-400 transition-colors uppercase font-semibold tracking-wider">Clear All</button>
+          </div>
           <div class="space-y-2 mb-3">
             <template x-for="(mod, index) in newRule.modifyResponse" :key="index">
               <div class="flex items-center gap-2 bg-surface/50 p-2 rounded-lg border border-gray-700/50">
@@ -139,8 +149,8 @@
                 <span class="text-sm text-gray-300 flex-1 truncate" x-text="mod.search"></span>
                 <span class="text-gray-600">→</span>
                 <span class="text-sm text-gray-400 flex-1 truncate" x-text="mod.replace"></span>
-                <button @click="newRule.modifyResponse.splice(index, 1)" class="text-gray-500 hover:text-red-400">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="6 18L18 6M6 6l12 12"></path></svg>
+                <button @click="newRule.modifyResponse.splice(index, 1)" class="text-gray-500 hover:text-red-400 text-sm">
+                  Delete
                 </button>
               </div>
             </template>
@@ -159,17 +169,22 @@
                 <span class="text-xs text-gray-500">Regex</span>
               </label>
             </div>
-            <div class="sm:col-span-2">
-              <button @click="addMod()" :disabled="!newMod.search" class="w-full py-1.5 bg-accent hover:bg-accent/80 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">Add Mod</button>
+            <div class="sm:col-span-2 flex gap-1">
+              <button @click="addMod()" :disabled="!newMod.search" class="flex-1 py-1.5 bg-accent hover:bg-accent/80 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">Add</button>
             </div>
           </div>
         </div>
       </div>
       
-      <div class="mt-6">
-        <button @click="addRule()" :disabled="!newRule.host.trim()"
-          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+      <div class="mt-6 flex gap-3">
+        <button @click="saveRule()" :disabled="!newRule.host.trim()"
+          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          x-text="editingIndex === null ? 'Add Rule' : 'Update Rule'">
           Add Rule
+        </button>
+        <button x-show="editingIndex !== null" @click="cancelEdit()"
+          class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors">
+          Cancel
         </button>
       </div>
     </div>
@@ -178,7 +193,7 @@
     <div class="mt-6 flex justify-end">
       <button @click="saveRules()" :disabled="saving"
         class="px-6 py-2.5 bg-highlight hover:bg-highlight/80 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
-        <span x-show="!saving">Save Rules</span>
+        <span x-show="!saving">Save to Server</span>
         <span x-show="saving">Saving…</span>
       </button>
     </div>
@@ -192,6 +207,7 @@
         interfaces: [],
         newRule: { host: '', targetInterface: '', targetDNS: '', modifyResponse: [] },
         newMod: { search: '', replace: '', isRegex: false },
+        editingIndex: null,
         saving: false,
         toast: { show: false, message: '', error: false },
 
@@ -230,21 +246,48 @@
           this.newMod = { search: '', replace: '', isRegex: false };
         },
 
-        addRule() {
+        editRule(index) {
+          this.editingIndex = index;
+          const rule = this.rules[index];
+          this.newRule = {
+            host: rule.host,
+            targetInterface: rule.targetInterface,
+            targetDNS: rule.targetDNS,
+            modifyResponse: JSON.parse(JSON.stringify(rule.modifyResponse)), // deep copy
+          };
+          document.getElementById('rule-form').scrollIntoView({ behavior: 'smooth' });
+        },
+
+        cancelEdit() {
+          this.editingIndex = null;
+          this.newRule = { host: '', targetInterface: '', targetDNS: '', modifyResponse: [] };
+        },
+
+        saveRule() {
           const host = this.newRule.host.trim();
           if (!host) return;
 
-          this.rules.push({
+          const ruleData = {
             host,
             targetInterface: this.newRule.targetInterface.trim(),
             targetDNS: this.newRule.targetDNS.trim(),
             modifyResponse: [...this.newRule.modifyResponse],
-            enabled: true,
-          });
-          this.newRule = { host: '', targetInterface: '', targetDNS: '', modifyResponse: [] };
+            enabled: this.editingIndex !== null ? this.rules[this.editingIndex].enabled : true,
+          };
+
+          if (this.editingIndex !== null) {
+            this.rules[this.editingIndex] = ruleData;
+          } else {
+            this.rules.push(ruleData);
+          }
+
+          this.cancelEdit();
         },
 
         removeRule(index) {
+          if (this.editingIndex === index) {
+            this.cancelEdit();
+          }
           this.rules.splice(index, 1);
         },
 
