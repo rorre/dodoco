@@ -43,7 +43,7 @@ install: build
 	mkdir -p $(UNIT_DIR)
 	echo "$$UNIT_FILE" > $(UNIT_DIR)/$(BIN_NAME).service
 	systemctl --user daemon-reload
-	@echo "Installed. Enable with: systemctl --user enable --now $(BIN)"
+	@echo "Installed. Enable with: systemctl --user enable --now $(BIN_NAME)"
 
 .PHONY: uninstall
 uninstall:
