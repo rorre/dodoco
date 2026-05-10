@@ -79,6 +79,7 @@ func handlePutRules(w http.ResponseWriter, r *http.Request, rulesPath string, en
 			HostRule:        host,
 			TargetInterface: target.TargetInterface,
 			TargetDNS:       target.TargetDNS,
+			ModifyResponse:  target.ModifyResponse,
 			Enabled:         enabled,
 		}
 		if err := rule.Validate(); err != nil {
