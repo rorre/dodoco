@@ -158,10 +158,10 @@
           
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
             <div class="sm:col-span-4">
-              <input type="text" x-model="newMod.search" placeholder="Search..." class="w-full bg-surface border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-highlight">
+              <input type="text" x-model="newMod.search" placeholder="Search (e.g. (Hello) World)" class="w-full bg-surface border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-highlight">
             </div>
             <div class="sm:col-span-4">
-              <input type="text" x-model="newMod.replace" placeholder="Replace..." class="w-full bg-surface border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-highlight">
+              <input type="text" x-model="newMod.replace" placeholder="Replace (e.g. $1 Universe)" class="w-full bg-surface border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-highlight">
             </div>
             <div class="sm:col-span-2 flex items-center justify-center py-1.5">
               <label class="flex items-center gap-2 cursor-pointer">
@@ -171,6 +171,16 @@
             </div>
             <div class="sm:col-span-2 flex gap-1">
               <button @click="addMod()" :disabled="!newMod.search" class="flex-1 py-1.5 bg-accent hover:bg-accent/80 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">Add</button>
+            </div>
+          </div>
+          <div class="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+            <div class="text-[10px] text-gray-500 flex items-center gap-1.5">
+              <span class="px-1 bg-highlight/10 text-highlight rounded font-bold">REGEX</span>
+              <span><code class="text-gray-400">google\.com</code> → <code class="text-gray-300">bing.com</code></span>
+            </div>
+            <div class="text-[10px] text-gray-500 flex items-center gap-1.5">
+              <span class="px-1 bg-highlight/10 text-highlight rounded font-bold">GROUPS</span>
+              <span><code class="text-gray-400">(Hello) (\w+)</code> → <code class="text-gray-300">$1 $2!</code></span>
             </div>
           </div>
         </div>
