@@ -326,10 +326,9 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		p.modifyResponse(resp, matchedRule)
 	}
 
-	if err := resp.Write(w); err != nil {
-		log.Printf("error writing response to client: %v", err)
-		return
-	}
+	w.WriteHeader(resp.StatusCode)
+	copyHeaders(w.Header(), resp.Header)
+	io.Copy(w, resp.Body)
 
 	resp.Body.Close()
 }
@@ -351,4 +350,12 @@ func httpError(w http.ResponseWriter, message string, code int) {
 		code, http.StatusText(code),
 		message,
 	)
+}
+
+func copyHeaders(dst, src http.Header) {
+	for k, vs := range src {
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
 }
