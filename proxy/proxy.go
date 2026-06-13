@@ -326,8 +326,8 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		p.modifyResponse(resp, matchedRule)
 	}
 
-	w.WriteHeader(resp.StatusCode)
 	copyHeaders(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
 	resp.Body.Close()
